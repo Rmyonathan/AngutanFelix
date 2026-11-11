@@ -1,0 +1,163 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { Camera, Check, ImageIcon, Loader2, X } from "lucide-react";
+import { useUploadThing } from "@/lib/uploadthing";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  label: string;
+  hint?: string;
+  value: string | null;
+  onChange: (url: string | null) => void;
+  /** When true, upload via UploadThing CDN (production). Otherwise local MVP. */
+  useCloudUpload?: boolean;
+};
+
+export function PhotoUploadField({
+  label,
+  hint,
+  value,
+  onChange,
+  useCloudUpload = false,
+}: Props) {
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { startUpload, isUploading } = useUploadThing("fieldDocUploader", {
+    onClientUploadComplete: (res) => {
+      const file = res?.[0];
+      const url = file?.ufsUrl ?? file?.url;
+      if (url) onChange(url);
+      setLocalLoading(false);
+    },
+    onUploadError: (err) => {
+      setError(err.message);
+      setLocalLoading(false);
+    },
+  });
+
+  const loading = localLoading || isUploading;
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setLocalLoading(true);
+
+    try {
+      if (useCloudUpload) {
+        await startUpload([file]);
+        return;
+      }
+
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload/local", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload gagal");
+      onChange(data.url as string);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload gagal");
+    } finally {
+      setLocalLoading(false);
+    }
+  }
+
+  function clearInputs() {
+    if (galleryRef.current) galleryRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
+  }
+
+  return (
+    <div className="rounded-2xl border-2 border-neutral-200 bg-white p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-base font-semibold text-neutral-900">{label}</p>
+          {hint && <p className="text-xs text-neutral-500">{hint}</p>}
+          {useCloudUpload && (
+            <p className="text-[10px] text-neutral-400">Cloud · UploadThing</p>
+          )}
+        </div>
+        {value && (
+          <button
+            type="button"
+            className="rounded-full p-1 text-neutral-500 hover:bg-neutral-100"
+            onClick={() => {
+              onChange(null);
+              clearInputs();
+            }}
+            aria-label="Hapus foto"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {value ? (
+        <div className="relative overflow-hidden rounded-xl border border-neutral-200">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value}
+            alt={label}
+            className="max-h-56 w-full object-contain bg-neutral-50"
+          />
+          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-1 text-[11px] text-white">
+            <Check className="h-3 w-3" /> Terunggah
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => galleryRef.current?.click()}
+            className={cn(
+              "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 px-4 py-8 text-neutral-700 transition hover:border-neutral-900 hover:bg-neutral-100",
+              loading && "opacity-60"
+            )}
+          >
+            {loading ? (
+              <Loader2 className="h-10 w-10 animate-spin" />
+            ) : (
+              <ImageIcon className="h-10 w-10" />
+            )}
+            <span className="text-sm font-medium">
+              {loading ? "Mengunggah…" : "Pilih dari Galeri"}
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => cameraRef.current?.click()}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white py-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          >
+            <Camera className="h-5 w-5" />
+            Ambil Foto (Kamera)
+          </button>
+        </div>
+      )}
+
+      {/* Galeri — tanpa capture agar HP boleh pilih album */}
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => onFile(e.target.files?.[0])}
+      />
+      {/* Kamera belakang (opsional) */}
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => onFile(e.target.files?.[0])}
+      />
+
+      {error && <p className="mt-2 text-sm text-neutral-900">{error}</p>}
+    </div>
+  );
+}
