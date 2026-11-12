@@ -39,20 +39,25 @@ async function main() {
     },
   });
 
-  await prisma.masterCostConfig.create({
-    data: {
-      name: "Default 2026",
-      isActive: true,
-      globalSolarPrice: 15_000,
-      globalTirePrice: 12_000_000,
-      tireLifespanDays: 180,
-      defaultMaintenanceBudget: 5_000_000,
-      defaultCicilan: 15_000_000,
-      defaultDepreciation: 250_000,
-      defaultMovingCost: 2_000_000,
-      estimatedOpsDaysPerMonth: 25,
-    },
+  const activeCost = await prisma.masterCostConfig.findFirst({
+    where: { isActive: true },
   });
+  if (!activeCost) {
+    await prisma.masterCostConfig.create({
+      data: {
+        name: "Default 2026",
+        isActive: true,
+        globalSolarPrice: 15_000,
+        globalTirePrice: 12_000_000,
+        tireLifespanDays: 180,
+        defaultMaintenanceBudget: 5_000_000,
+        defaultCicilan: 15_000_000,
+        defaultDepreciation: 250_000,
+        defaultMovingCost: 2_000_000,
+        estimatedOpsDaysPerMonth: 25,
+      },
+    });
+  }
 
   // Akun login supir: username "budi" / password123
   const budiUser = await prisma.user.upsert({
@@ -92,26 +97,36 @@ async function main() {
       defaultDriverId: driver.id,
       purchasePrice: 850_000_000,
       estimatedSalvageValue: 150_000_000,
-      economicLifespanDays: 1500, // hari operasi: 5 thn × 300 hari jalan
+      economicLifespanDays: 1500,
     },
   });
 
-  await prisma.masterCustomer.create({
-    data: {
-      customerName: "PT Batubara Sejahtera",
-      loadingLocation: "Pit A — Tabang",
-      dumpingLocation: "Port Samarinda",
-      oneWayDistance: 42,
-      ratePerTon: 70_000,
-      targetTonase: 50_000,
-      trips: {
-        create: [
-          { name: "Pit A → Port Samarinda", distanceKm: 42, uangJalan: 250_000 },
-          { name: "Pit B → Port Samarinda", distanceKm: 55, ratePerTon: 80_000, uangJalan: 300_000 },
-        ],
-      },
-    },
+  const existingCustomer = await prisma.masterCustomer.findFirst({
+    where: { customerName: "PT Batubara Sejahtera" },
   });
+  if (!existingCustomer) {
+    await prisma.masterCustomer.create({
+      data: {
+        customerName: "PT Batubara Sejahtera",
+        loadingLocation: "Pit A — Tabang",
+        dumpingLocation: "Port Samarinda",
+        oneWayDistance: 42,
+        ratePerTon: 70_000,
+        targetTonase: 50_000,
+        trips: {
+          create: [
+            { name: "Pit A → Port Samarinda", distanceKm: 42, uangJalan: 250_000 },
+            {
+              name: "Pit B → Port Samarinda",
+              distanceKm: 55,
+              ratePerTon: 80_000,
+              uangJalan: 300_000,
+            },
+          ],
+        },
+      },
+    });
+  }
 
   console.log("Seed OK. Owner:", owner.email, "/ password123");
 }
